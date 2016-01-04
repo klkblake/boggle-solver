@@ -3,7 +3,8 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
+    android:baselineAligned="false"
+    android:orientation="horizontal"
     android:paddingBottom="@dimen/activity_vertical_margin"
     android:paddingLeft="@dimen/activity_horizontal_margin"
     android:paddingRight="@dimen/activity_horizontal_margin"
@@ -13,8 +14,8 @@
     <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_gravity="center_horizontal"
-        android:orientation="horizontal">
+        android:layout_gravity="center_vertical"
+        android:orientation="vertical">
 
         <Spinner
             android:id="@+id/sizeSpinner"
@@ -29,13 +30,12 @@
             android:focusable="true"
             android:focusableInTouchMode="true"
             android:text="Solve" />
-
     </LinearLayout>
 
     <com.klkblake.bogglesolver.SquareGridLayout
         android:id="@+id/letterGrid"
-        android:layout_width="wrap_content"
-        android:layout_height="0dp"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
         android:layout_weight="1"
         android:columnCount="6"
         android:rowCount="6"
