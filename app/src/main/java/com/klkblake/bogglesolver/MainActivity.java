@@ -1,6 +1,8 @@
 package com.klkblake.bogglesolver;
 
-import android.content.SharedPreferences;
+import android.app.AlertDialog;
+import android.content.res.AssetFileDescriptor;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -9,17 +11,26 @@ import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.GridLayout;
 import android.text.Editable;
 import android.text.TextWatcher;
+import android.util.Log;
 import android.view.View;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.AdapterView;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ProgressBar;
 import android.widget.Spinner;
+
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.nio.MappedByteBuffer;
+import java.nio.channels.FileChannel;
+import java.util.ArrayList;
 
 public class MainActivity extends AppCompatActivity implements AdapterView.OnItemSelectedListener {
     private static final int MIN_SIZE = 4;
     private static final int MAX_SIZE = 6;
     private static final String PREF_GRID_SIZE = "grid_size";
+    private ProgressBar progressBar;
     private Spinner sizeSpinner;
     private int currentSize = 4;
     private EditText[] letters = new EditText[MAX_SIZE * MAX_SIZE];
@@ -27,11 +38,15 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
     private Handler handler = new Handler(Looper.getMainLooper());
     private boolean editing = false;
 
+    private MappedByteBuffer dict;
+    private SolveTask solveTask;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        progressBar = (ProgressBar) findViewById(R.id.progressBar);
         currentSize = getPreferences(MODE_PRIVATE).getInt(PREF_GRID_SIZE, MIN_SIZE);
         sizeSpinner = (Spinner) findViewById(R.id.sizeSpinner);
         sizeSpinner.setSelection(currentSize - MIN_SIZE);
@@ -56,12 +71,25 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
             }
         }
         solveButton = (Button) findViewById(R.id.solveButton);
+        if (dict == null) {
+            AssetFileDescriptor fd = getResources().openRawResourceFd(R.raw.words);
+            FileChannel chan = new FileInputStream(fd.getFileDescriptor()).getChannel();
+            try {
+                dict = chan.map(FileChannel.MapMode.READ_ONLY, fd.getStartOffset(), fd.getLength());
+            } catch (IOException e) {
+                Log.e("BoggleSolver", "Couldn't map dictionary", e);
+                throw new RuntimeException(e);
+            }
+        }
     }
 
     @Override
     public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
         int newSize = position + MIN_SIZE;
         if (currentSize != newSize) {
+            if (solveTask != null) {
+                solveTask.cancel(true);
+            }
             getPreferences(MODE_PRIVATE).edit().putInt(PREF_GRID_SIZE, newSize).apply();
             currentSize = newSize;
             for (int y = 0; y < MAX_SIZE; y++) {
@@ -80,6 +108,68 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
     @Override
     public void onNothingSelected(AdapterView<?> parent) {
         throw new RuntimeException("Impossible");
+    }
+
+    public void solve(View view) {
+        if (solveTask != null) {
+            solveTask.cancel(true);
+        }
+        String[] letterValues = new String[currentSize * currentSize];
+        for (int y = 0; y < currentSize; y++) {
+            for (int x = 0; x < currentSize; x++) {
+                int i = x + y * MAX_SIZE;
+                String str = letters[i].getText().toString();
+                if (str.length() == 0) {
+                    new AlertDialog.Builder(this)
+                            .setMessage("Some entries are missing; please fill them in")
+                            .setPositiveButton("OK", null)
+                            .show();
+                    return;
+                }
+                letterValues[x + y * currentSize] = str.toLowerCase();
+            }
+        }
+        solveTask = new SolveTask();
+        solveTask.execute(letterValues);
+    }
+
+    private class SolveTask extends AsyncTask<String, Integer, ArrayList<String>> {
+        final int size = currentSize;
+
+        @Override
+        protected ArrayList<String> doInBackground(String... params) {
+            int progress = 0;
+            publishProgress(0);
+            for (int i = 0; i <= params.length; i++) {
+                try {
+                    Thread.sleep(10);
+                } catch (InterruptedException e) {
+                    return null;
+                }
+                publishProgress(++progress);
+            }
+            return null;
+        }
+
+        @Override
+        protected void onProgressUpdate(Integer... values) {
+            if (values[0] == 0) {
+                progressBar.setVisibility(View.VISIBLE);
+                progressBar.setProgress(0);
+                progressBar.setMax(size * size);
+            }
+            progressBar.setProgress(values[0]);
+        }
+
+        @Override
+        protected void onPostExecute(ArrayList<String> words) {
+            onCancelled(words);
+        }
+
+        @Override
+        protected void onCancelled(ArrayList<String> words) {
+            progressBar.setVisibility(View.INVISIBLE);
+        }
     }
 
     private class LetterWatcher implements TextWatcher {
@@ -101,6 +191,9 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
         public void afterTextChanged(Editable s) {
             if (editing) {
                 return;
+            }
+            if (solveTask != null) {
+                solveTask.cancel(true);
             }
             if ((s.length() > 1 || s.length() == 1 && Character.isLowerCase(s.charAt(0)))) {
                 int i;
