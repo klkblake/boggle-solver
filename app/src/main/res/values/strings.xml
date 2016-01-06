@@ -1,5 +1,9 @@
 <resources>
     <string name="app_name">Boggle Solver</string>
+    <plurals name="results_title">
+        <item quantity="one">Found %d word</item>
+        <item quantity="other">Found %d words</item>
+    </plurals>
     <string-array name="sizes">
         <item>4x4</item>
         <item>5x5</item>

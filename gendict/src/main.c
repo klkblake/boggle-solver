@@ -7,6 +7,7 @@
 #define SIZE (1 << 18)
 #define MASK (SIZE - 1)
 
+/*
 typedef struct {
 	u32 hashes[SIZE];
 	u32 keys[SIZE];
@@ -29,6 +30,28 @@ void insert(Table *table, u8 *key, usize len, u32 key_offset) {
 	}
 	table->hashes[bucket] = h;
 	table->keys[bucket] = key_offset;
+}
+*/
+
+typedef struct Node {
+	struct Node *children[26];
+	u32 offset;
+	u32 num_children;
+	b32 word_end;
+} Node;
+
+void insert(Node *node, u8 *word, u32 len) {
+	if (len == 0) {
+		node->word_end = true;
+		return;
+	}
+	u32 i = *word - 'a';
+	Node *child = node->children[i];
+	if (!child) {
+		child = node->children[i] = calloc(sizeof(Node), 1);
+		node->num_children++;
+	}
+	insert(child, word + 1, len - 1);
 }
 
 global_variable char *prog_name;
@@ -56,7 +79,7 @@ void write_or_die(void *ptr, usize size, FILE *file) {
 int main(int argc, char **argv) {
 	prog_name = argv[0];
 	if (argc != 2) {
-		printf("usage: %s words.lst > dict\n", argv[0]);
+		printf("usage: %s words.lst > words.dict\n", argv[0]);
 		return 1;
 	}
 	FILE *file = fopen(argv[1], "r");
@@ -77,28 +100,82 @@ int main(int argc, char **argv) {
 			file_data[i] = 0;
 		}
 	}
-	Table table = {};
+	Node root = {};
 	u8 *next = file_data;
 	u8 *end = file_data + size;
-	u32 offset = 0;
+	u32 height = 0;
 	while (next < end) {
-		usize len = strlen((char *)next);
-		insert(&table, next, len, offset);
-		memmove(file_data + offset, next, len);
+		u32 len = (u32)strlen((char *)next);
+		insert(&root, next, len);
+		if (height < len) {
+			height = len;
+		}
 		next += len + 1;
-		offset += len;
-		size--;
 	}
-	u32 tmp = SIZE;
-	write_or_die(&tmp, sizeof(tmp), stdout);
-	u32 words_start = sizeof(tmp) + SIZE * 6;
-	u32 written = sizeof(tmp);
-	for (u32 i = 0; i < SIZE; i++) {
-		write_or_die(&table.hashes[i], 3, stdout);
-		tmp = (u32) (table.keys[i] - words_start);
-		write_or_die(&tmp, 3, stdout);
-		written += 6;
+	height++;
+	Node *nodes[height*25 + 1];
+	nodes[0] = &root;
+	u32 count = 1;
+	u32 max_offset = 0;
+	u32 offset = 0;
+	while (count > 0) {
+		Node *node = nodes[--count];
+		if (node->num_children == 0) {
+			continue;
+		}
+		for (s32 i = 25; i >= 0; i--) {
+			if (node->children[i]) {
+				nodes[count++] = node->children[i];
+			}
+		}
+		node->offset = offset;
+		if (offset > max_offset) {
+			max_offset = offset;
+		}
+		offset += 1 + 4 * node->num_children;
 	}
-	assert(words_start == written);
-	write_or_die(file_data, size, stdout);
+	fprintf(stderr, "Max offset: %d\n", max_offset);
+	nodes[0] = &root;
+	count = 1;
+	max_offset = 0;
+	u32 histogram[24] = {};
+	u32 child_histogram[26] = {};
+	while (count > 0) {
+		Node *node = nodes[--count];
+		for (s32 i = 25; i >= 0; i--) {
+			if (node->children[i] && node->children[i]->num_children != 0) {
+				nodes[count++] = node->children[i];
+			}
+		}
+		write_or_die(&node->num_children, 1, stdout);
+		for (u8 i = 0; i < 26; i++) {
+			if (node->children[i]) {
+				u32 word_end = node->children[i]->word_end << 23;
+				write_or_die(&i, 1, stdout);
+				if (node->children[i]->num_children == 0) {
+					write_or_die(&word_end, 3, stdout);
+				} else {
+					offset = node->children[i]->offset | word_end;
+					write_or_die(&offset, 3, stdout);
+					offset = node->children[i]->offset -
+						(node->offset + 1 + 4 * node->num_children);
+					u32 bits;
+					if (offset == 0) {
+						bits = 0;
+					} else {
+						bits = 32 - (u32)__builtin_clz(offset);
+					}
+					histogram[bits]++;
+					if (offset > max_offset) {
+						max_offset = offset;
+					}
+				}
+			}
+		}
+	}
+	fprintf(stderr, "Max diff offset: %d\n", max_offset);
+	fprintf(stderr, "Histogram:\n");
+	for (u32 i = 0; i < array_count(histogram); i++) {
+		fprintf(stderr, "%u %u\n", i, histogram[i]);
+	}
 }
