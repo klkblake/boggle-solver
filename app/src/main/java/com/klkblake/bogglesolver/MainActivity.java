@@ -296,13 +296,15 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
         }
     }
 
-    private static boolean enforceLengthLimit(Editable s) {
+    private static void enforceLengthLimit(Editable s) {
+        if (s.length() == 0) {
+            return;
+        }
         boolean isUpper = Character.isUpperCase(s.charAt(0));
         int expected = isUpper ? 2 : 1;
         if (s.length() > expected) {
             s.delete(expected, s.length());
         }
-        return isUpper;
     }
 
     private class LetterWatcher implements TextWatcher {
@@ -371,7 +373,8 @@ public class MainActivity extends AppCompatActivity implements AdapterView.OnIte
                 }
             } else {
                 editing = true;
-                boolean isUpper = enforceLengthLimit(s);
+                enforceLengthLimit(s);
+                boolean isUpper = Character.isUpperCase(s.charAt(0));
                 if (isUpper) {
                     if (s.length() == 2) {
                         s.replace(1, 2, "" + Character.toLowerCase(s.charAt(1)));

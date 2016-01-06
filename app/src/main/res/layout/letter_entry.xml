@@ -2,6 +2,7 @@
 <EditText xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="0dp"
     android:layout_height="0dp"
-    android:gravity="center_horizontal"
-    android:inputType="text|textNoSuggestions"
-    android:selectAllOnFocus="true" />
+    android:gravity="center"
+    android:inputType="textVisiblePassword|textNoSuggestions"
+    android:selectAllOnFocus="true"
+    android:imeOptions="flagNoFullscreen|actionDone|flagForceAscii" />
